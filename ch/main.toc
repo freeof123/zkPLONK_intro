@@ -1,0 +1,6 @@
+\contentsline {section}{\numberline {1}ZkPLONK相关介绍}{1}{section.1}
+\contentsline {subsection}{\numberline {1.1}参考资料}{1}{subsection.1.1}
+\contentsline {subsection}{\numberline {1.2}问题描述和zkSNARK回顾}{1}{subsection.1.2}
+\contentsline {subsection}{\numberline {1.3}zkPLONK方案}{2}{subsection.1.3}
+\contentsline {subsection}{\numberline {1.4}增加排列限制条件}{5}{subsection.1.4}
+\contentsline {subsection}{\numberline {1.5}总结}{5}{subsection.1.5}

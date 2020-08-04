@@ -1,0 +1,190 @@
+\documentclass[12pt]{article}
+\usepackage{xeCJK}
+\input{../common/common.tex}
+\usepackage{indentfirst}
+\usepackage{amssymb}
+%\usepackage[ruled,vlined]{algorithm2e}
+
+\setCJKmainfont[BoldFont = STSongti-SC-Bold]{STSongti-SC-Regular}
+\setCJKfamilyfont{hei}{SIL-Hei-Med-Jian}		%宋体
+\setCJKfamilyfont{song}{SimSun}		%宋体
+\setCJKfamilyfont{kai}{Kaiti}		%楷体
+\setCJKfamilyfont{fang}{song}	%仿宋
+\setCJKfamilyfont{li}{song}			%隶书
+\setCJKfamilyfont{you}{Yuanti}		%幼圆
+
+\newcommand{\song}{\CJKfamily{song}}	%宋体
+\newcommand{\hei}{\CJKfamily{hei}}	%黑体
+\newcommand{\kai}{\CJKfamily{kai}}	%楷体
+\newcommand{\fs}{\CJKfamily{fang}}	%仿宋
+\newcommand{\li}{\CJKfamily{li}}		%隶书
+\newcommand{\you}{\CJKfamily{you}}	%幼圆
+\newcommand{\reffig}[1]{图\ref{#1}}
+\newcommand{\refsec}[1]{\S~\ref{#1}}
+
+\newcommand{\txhash}[1]{{\href{https://etherscan.io/tx/#1}{\texttt{#1}}}}
+
+\onehalfspacing   % ----------设置1.5倍行距（可能有意义，待调整）
+
+%\parindent=20pt  % -------------------首行缩进大小，英文分段就直接0pt了吧。
+\setlength{\parindent}{2.1em}
+\setlength{\parskip}{0.3\baselineskip}
+\newcommand{\nrcore}{Core Nebulas Rank}
+\newcommand{\nrext}{Extended Nebulas Ranks}
+\newcommand{\dom}{{\; \texttt{dom}\;}}
+\newcommand{\nr}{\Gamma}
+\newcommand{\zk}{zkPLONK}
+\newcommand{\ds}{\{0,...,d\}}
+\newcommand{\pp}{$\mathcal{P}$}
+\newcommand{\vv}{$\mathcal{V}$}
+
+\setCJKsansfont[BoldFont = STHeitiSC-Medium]{STHeitiSC-Light}
+
+
+\newtheorem{property}{特征}
+\newtheorem{corollary}{推论}
+\newtheorem{assumption}{假设}
+\newtheorem{definition}{定义}
+\newtheorem{remark}{注}[section]
+%\addbibresource{reference.bib}
+
+\begin{document}
+\pagestyle{empty}
+\renewcommand{\contentsname}{目录}
+\renewcommand{\abstractname}{摘要}
+\renewcommand{\refname}{参考文献}
+%\renewcommand{\nomname}{术语表（按首字母排序）}
+\renewcommand{\figurename}{图}
+\renewcommand{\tablename}{表}
+\renewcommand{\baselinestretch}{1.5}
+\renewcommand{\appendixname}{附录}
+\renewcommand{\proofname}{证明}
+
+\pagecolor{\pcolor}
+
+
+
+\begin{titlepage}
+  \begin{center}
+    \vspace*{5.5cm}
+    \includegraphics[scale=0.5]{../common/logo.png}
+    \vspace{0.5cm}
+
+
+   \textbf{\huge{\zk 介绍}}
+
+    \vspace{0.5cm}
+    ASResearch\\曾驭龙
+    \textbf{}
+  \end{center}
+
+\end{titlepage}
+\setcounter{page}{0}
+%\thispagestyle{empty}
+\tableofcontents
+\newpage
+\setcounter{page}{1}
+\pagestyle{fancy}
+\vspace*{0.01cm}
+
+\section{ZkPLONK相关介绍}
+ZkPLONK，全称Permutations(P) over Lagrange-bases(L) for Oecumenical(O) Noninteractive(N) Arguments(A) of Knowledge(K)，
+是于2019年提出的零知识证明体系，是基于2018年sonic的改进。在此之前还有zkSNARK，zkSTARK，Bulletproof等。ZkPLONK的最大特点是，可信第三方构造证明/验证钥匙所需要的common refenrence string(CRS)是通用的（该性质叫做universal），即可信第三方只需要生成一个CRS，即可用于不同的零知识证明任务（更准确来说是针对不同的电路，见zkSNARK介绍。当然这里需要电路的最大规模等参数固定）。这大大提高了零知识证明系统的实用性。
+
+本文简要介绍\zk 实现univeral CRS的核心思想，以及相比于zkSNARK其有何本质不同。
+\subsection{参考资料}
+[1] V神博客：https://vitalik.ca/general/2019/09/22/plonk.html
+
+[2] 原始论文："PLONK: Permutations over Lagrange-bases for Oecumenical Noninteractive arguments of Knowledge", Ariel Gabizon, Zachary J. Williamson and Oana Ciobotaru.
+\subsection{问题描述和zkSNARK回顾}
+\zk 与zkSNARK解决的都是给方程赋值一组解的问题，例如下面这个方程组。
+\begin{align*}
+	&2a+b=c \\
+	&c+3d=e \\
+	&4a+5e=f 
+\end{align*}
+\pp 需要向\vv 证明他知道一组满足上述方程组的变量赋值（可选的零知识性质：\pp 给出的证明不会暴露具体的变量值。但本文不做讨论）。
+
+我们先来回顾zkSNARK的做法：上述方程组一共三个方程，包含6个变量。
+
+\begin{itemize}
+\item zkSNARK把每一个方程对应于多项式在某一点的取值，如$x=1,2,3$。这一点和\zk 类似（后面介绍）。这样三个方程相等等价于一个多项式在1,2,3这三个点取值为0，亦即被多项式$Z(x)=(x-1)(x-2)(x-3)$整除。
+\item 这个多项式如何构造呢？因为要处理同一变量出现在不同方程中的情况，zkSNARK的解决方法为，将每个方程视作同样的结构：包含所有变量的系数，例如，第一个方程左边对应的向量为(2,1,0,0,0,0)。
+\item 这样，\zk 给出了6个所谓“系数”多项式$L_i(x),i=1,2,3,4,5,6$，其中$L_i(j),j=1,2,3$的取值为第$i$个变量在第$j$个方程的系数。然后问题转化为对这6个多项式进行线性组合，线性组合赋值的系数就是6个变量的值：$L(x)=aL_1(x)+...+fL_6(x)$，使得结果多项式能被$Z(x)$整除（事实上，是左多项式乘以右多项式减去出多项式被$Z(x)$整除，这里我们省略细节）。
+\end{itemize}
+为了实现上述目标，我们发现针对方程特定的（非通用）CRS对zkSNARK是必须的：我们需要确保结果多项式是给定多项式的线性组合。特别是当方程数大于变量数时，一个任选的$L(x)$显然不一定能表达成$L_i(x)$的线性组合。
+
+为了确保这一性质（\pp 给出的$L(x)$是给定多项式的线性组合得到）可验证，zkSNARK采取的方式是引入偏移量$\alpha$，即给出$g^{L_i(x)}$和$g^{\alpha L_i(x)}$，并要求\pp 提供$g^{L(x)}$和$g^{\alpha L(x)}$。之后\vv 通过pairing验证\pp 给出结果满足偏移量设定。其原理在于，如果\pp 能成功给出某个满足偏移量方程的数对，那么这个数对一定是根据已经公开的满足偏移量方程的数对进行线性组合得出。
+
+咋看之下，zkSNARK恰好完美的通过这个偏移量的性质解决了上述验证线性组合的问题，确实非常巧妙。然而其一个弊端是，有可信第三方提供的带偏移量的“具体”多项式，即$\alpha L_i(x)$等，是必须的：第三方不能直接直接给出$\alpha$，否则偏移量方程可以被任意破解。所以，zkSNARK相当于限定了CRS必须是针对具体的$L_i(x)$给出，但对于不同的任务，其对应的方程是不同的，所需的$L_i(x)$也不同。这就造成了zkSNARK在setup上的局限性。
+
+\subsection{\zk 方案}
+\zk 采用了完全不同的构造方案。还是如上章同样的方程，\zk 采用的做法关键点如下
+\begin{itemize}
+	\item 首先，\zk 要求每个方程左边包含的变量数目只能为2个，右边为1个（事实上，\zk 还可以让每个方程左边包含一个乘积项。这里本文省略细节）。对于含多个变量的情况，可引入中间变量化为多个方程来表示。（注意到，即使对于上述每个方程的变量只有两个的情况，zkSNARK所需向量维度仍然为6个，包含所有变量，即用到的$L_i(x)$数目为6，对此情形并没有简化问题）。
+	\item 其次，\zk 给出的公共多项式，这里用$P(x)$表示，代表的是三个方程的第一个变量对应的系数，而不管这个变量是什么。（相对应的，zkSNARK用的公共多项式是三个方程中$a$这个变量对应的系数）例如上面这个例子，$P(1)=2,P(2)=1,P(3)=4$。
+	\item 给出公共多项式后，\pp 要给出的也是一个多项式，$f(x)$，他在三个给定点的取值对应三个方程中第一个变量的取值，即$f(1)=a,f(2)=c,f(3)=a$。需要达到的目标为：结果多项式（包含$f(x)P(x)$等）能被$Z(x)$整除。（事实上，结果多项式是$P(x)f(x)+Q(x)g(x)-O(x)h(x)$，其中$Q(x),O(x)$分别为方程的第二个变量和方程右边的变量的系数多项式，$g(x),h(x)$分别为方程的第二个变量和方程右边的变量的取值多项式。这里我们省略细节）。
+\end{itemize}
+我们不能让\pp 直接给出$f(x)$的所有系数，一方面其交互复杂度过高——我们希望证明的长度为常数级别，另一方面我们希望\pp （可选择的）不暴露变量复制的信息——零知识证明。和zkSNARK的思想类似，我们让\pp 给出和$f(x)$有关的一个数（可能不止一个，总之是常数规模），而不是完整的$f(x)$，且这个数能实现验证功能。
+
+首先，我们介绍\zk 的CRS的形式：和zkSNARK类似，可信第三方随机生成一个$s$，然后把$E[1],E[s],E[s^2],...,E[s^d]$作为CRS给出，其中$E[x]=g^x$。（recall：同态加密）
+
+这就是\zk 的CRS，很明显它是通用的——它不包含任何没有偏移量，更不用针对公开多项式$P(x)$等来生成。
+
+接下来我们要介绍一个新概念，叫 polynomial commitment。本质而言，是一种通过CRS将需要给出的多项式浓缩成一个数的算法。
+
+\textbf{$f(x)$的commitment为$E[f(s)]$，可通过CRS算出。}
+
+\pp 为了完成证明任务，需要提供两个commitment，一个针对要给出的$f(x)$，即$E[f(s)]$，另外一个针对商多项式，$t(x)=f(x)P(x)/Z(x)$\footnote{为了方便起见我们就假设结果多项式为$f(x)P(x)$，而省略第二个变量和方程右边变量对应的多项式}，即$E[t(s)]$。
+
+那么，有了这两个commitment之后，\vv 如何验证呢？他也可以通过CRS算出$E[Z(s)],E[P(s)]$的值，因为这些多项式都是公开的，然后根据$e(E[t(s)],E[Z(s)])=e(E[f(s)],E[P(s)])$来验证。
+
+根据所谓“随机数相等即相等”的原则（见zkSNARK那篇），上述过程的确是难以伪造的，即\pp 在不知道满足条件的$f(x),t(x)$的情况下难以给出能通过验证的证明。但现在的问题是，我们能认为$s$是“真随机的”吗？
+
+\zk 系统的一个很大的不同在于，它所用的CRS是通用的，即在没有更新整个系统的情况下所有人都用的是同一个$s$来给出commitment。这样带来的问题是，\pp 可能自己不知道$f(x)$长什么样，但是他可以查找并使用“别人用过的”commitment去验证。而且，如果每个任务都使用同一个随机数来验证，也与随机数的本质相违背。（这是我能想到的唯一解释）而zkSNARK不会有这个问题：因为它是对每个任务都生成一组独特的CRS，故每次可以产生不同的随机数。
+
+所以，为了实现\zk 的验证，我们需要每次使用一个不同的随机数，再来判断“多项式在这个数的取值相等”。\zk 假设在\pp 给出commitment之后，再由\vv 给出另外一个随机数$r$，然后\pp 给出$f(r)$的值（注意到这里没有用加密）。这个时候，\vv 可以直接算出$P(r),Z(r)$的值（不需要CRS），然后\vv 自己算出$t(r)=f(r)P(r)/Z(r)$，即$t(r)$应该等于的值。
+
+那么，既然\vv 什么都能算出来，他还需要做什么验证呢？问题的关键在于，如何保证\pp 给出的函数在$r$点的取值是正确的。
+
+这时，就需要和\pp 和前面给出的commitment $E[f(s)],E[t(s)]$进行联动了。一般而言，和commitment有关的一个对应概念叫“open”，而polynomial commitment的open的作用就是证明commit的多项式在某个点的取值是正确的。即\pp 通过对commitment $E[f(s)]$给出一个"Open"，证明函数$f(x)$在$r$点的取值就是他给出的$f_r=f(r)$。
+
+Polynomial commitment用到的一个事实为，如果$f(r)=f_r$，那么多项式$f(x)-f_r$必被多项式$x-r$整除。这时\pp 可以通过CRS计算出$w(x)=\frac{f(x)-f_r}{x-r}$在$s$处的加密值$g[w(s)]$并发送出去。
+
+所以，所谓的open就是对多项式$w(x)$的一个commitment $E[w(s)]$。一旦给出，\vv 可以通过 $e(E[w(s)],E[s]/E[r])=e(E[f(s)]/E[f_r],E[1])$来验证（即验证等式$\frac{f(s)-f_r}{s-r}=w(s)$）。一旦验证通过则可以说明$f(r)$的取值高概率是$f_r$。否则，\pp 无法给出整多项式$w(s)$，故无法通过CRS给出满足上述关系的$E[w(s)]$。
+
+注: commitment的open一定要求$r$足够随机。同时上述过程虽然是交互的——需要由\vv 给出随机数$r$，但我们可以使用Fiat-Shamir过程将其转化为非交互的，即令$r$等于某些transcript的hash值即可，注意到这里的transcript一定要包含\pp 之前给出的commitment $E[f(s)],E[t(s)]$等以保证“时序性”。
+
+所以，\pp 的证明包括了两个commitment $E[f(s)],E[t(s)]$，两个分别针对他们的open，以及一个取值$f_r$。至于多项式$t(x)$在$r$的取值$t_r$就不用给了，因为\vv 可以自己算出来（即使给了\vv 也要验证），然后\vv 只需通过上述过程验证两个open均合法即可。
+
+注：实际实现中可以将多个待验证的open rollup到一起，只需一次验证即可，大大降低验证复杂度。具体见原始论文。
+\subsection{增加排列限制条件}
+上述算法还忽略了一个重要的限制条件：\pp 在构造$f(x)$时，有些取值对应的是同一个变量！例如在上面那个方程中，必须要有$f(1)=f(3)$（都等于变量$a$的值）。但上述算法在对不满足此条件的$f(x)$也能验证通过。
+
+\zk 通过引入额外的限制条件来证明$f(x)$在某些取值下函数值相等。它用到如下事实：
+
+如果函数$f(x)$在某些取值$x \in T$上相等（$T$可以有多个），令$\sigma: [n] \rightarrow [n]$为一个排列，这个排列定义为（包含所有的）$T$上的置换。例如，假设$f(1)=f(3)$，则定义$\sigma=(3,2,1)$。$\sigma$这一排列是完全公开的信息，可通过方程组的形式获取。
+
+基于这个定义，我们不难发现下面的等式成立：
+\begin{align}
+	\label{per}
+& \Pi_{i=1}^n \big( f(i)+\beta i +\gamma \big) = \Pi_{i=1}^n \big( f(\sigma(i))+\beta i +\gamma \big)
+\end{align}
+其中$\beta,\gamma$为随机给定。因为对于$i \in T$有$f(i)=f(\sigma(i))$。
+
+那么，其逆命题成不成立呢？事实上，有结论表明，如果(\ref{per})对于足够随机的$\beta,\gamma$成立，那么以高概率有$f(x)$在$x \in T$上相等。
+
+所以，\pp 同时需要给出一个证明保证(\ref{per})成立，且可以认为\pp 难以构造出在$f(x)$在$x \in T$上不等的且(\ref{per})成立。这就是\zk 中P——permutation的由来：证明函数经过排列变换后函数值相同。
+
+在实际实现中，\zk 巧妙的将(\ref{per})成立的问题转化为某两个特定多项式被$Z(x)$整除的问题，这样可以用同样的commitment的技巧解决，且能和前面的验证rollup到一起来完成！这里我们不介绍细节。同时，\zk 在定义固定点多项式$Z(x)$时也用了一定技巧，用有限域单位根$\omega,\omega^2,...,\omega^n$来代替取点$1,2,3,...,n$，这样可以用FFT等手段加速计算过程。参见原文。
+\subsection{总结}
+至此，我们介绍了\zk 的基本思想以及和zkSNARK的对比。它能实现通用的trusted setup，且证明长度为$O(1)$，具有很高的实用性。其依赖的假设需要引入抗碰撞hash函数（用于FS过程），这方面要求比zkSNARK更多。总之我们认为\zk 具有很高的实用价值，相信以后会被广泛利用。
+
+\bibliography{reference}
+
+\newpage
+\begin{appendices}
+%\input{changelog.tex}
+\end{appendices}
+
+\end{document}
